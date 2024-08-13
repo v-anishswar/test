@@ -1,0 +1,67 @@
+resources:
+  repositories:
+  - repository: self
+    type: git
+    ref: refs/heads/duda-all-v1
+jobs:
+- job: Job_1
+  displayName: Agent job 1
+  pool:
+    name: azure-devops-agents
+  steps:
+  - checkout: self
+    clean: true
+    fetchTags: true
+  - task: ArchiveFiles@2
+    displayName: Archive
+    inputs:
+      rootFolderOrFile: $(System.DefaultWorkingDirectory)/
+      includeRootFolder: false
+      verbose: true
+  - task: Npm@1
+    displayName: npm install
+    inputs:
+      verbose: false
+      customCommand: install
+  - task: Npm@1
+    displayName: npm build:test
+    inputs:
+      command: custom
+      workingDir: $(System.DefaultWorkingDirectory)/
+      verbose: false
+      customCommand: run build:test
+  - task: AzureCLI@2
+    displayName: 'Azure CLI '
+    inputs:
+      connectedServiceNameARM: 71883043-3d39-4921-b249-3dd81c686445
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: az webapp deployment slot create --name test-corporate --resource-group globalwebsite --slot staging --configuration-source test-corporate
+  - task: AzureRmWebAppDeployment@4
+    displayName: 'Azure App Service Deploy: test-corporate'
+    retryCountOnTaskFailure: 1
+    inputs:
+      ConnectedServiceName: 71883043-3d39-4921-b249-3dd81c686445
+      WebAppKind: webAppLinux
+      WebAppName: test-corporate
+      DeployToSlotOrASEFlag: true
+      ResourceGroupName: globalwebsite
+      SlotName: staging
+      Package: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+      RuntimeStack: NODE|16-lts
+      StartupCommand: npm run start
+  - task: AzureAppServiceManage@0
+    displayName: 'Swap Slots: test-corporate'
+    inputs:
+      ConnectedServiceName: 71883043-3d39-4921-b249-3dd81c686445
+      WebAppName: test-corporate
+      ResourceGroupName: globalwebsite
+      SourceSlot: staging
+  - task: AzureAppServiceManage@0
+    displayName: 'Delete Slot: test-corporate'
+    inputs:
+      ConnectedServiceName: 71883043-3d39-4921-b249-3dd81c686445
+      Action: Delete Slot
+      WebAppName: test-corporate
+      ResourceGroupName: globalwebsite
+      Slot: staging
